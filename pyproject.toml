@@ -21,8 +21,17 @@ dev = [
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint.per-file-ignores]
+# Pharmacy opening hours are local wall-clock time and the simulated world has
+# no timezone concept, so naive datetimes are the intended domain model.
+"tests/test_simulator.py" = ["DTZ001"]
+
 [tool.pytest.ini_options]
 # Flat package layout with no build-system: put the repo root on sys.path so
 # tests can import simulator/, dedup/, ... directly.
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["slow: full-scale checks (fault rates, medians, runtime ceiling)"]
+# Deselect slow tests by default so the edit loop stays fast; a CLI `-m slow`
+# overrides this, so `uv run pytest -m slow` runs only the slow set.
+addopts = "-m 'not slow'"

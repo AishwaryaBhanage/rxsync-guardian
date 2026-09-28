@@ -8,6 +8,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Raw data is never committed (synthetic or not) -- keep the folder only
+# Generated data is never committed -- it is reproducible from (seed, as-of)
 data/raw/*
 !data/raw/.gitkeep
+data/truth/
+data/faults.jsonl

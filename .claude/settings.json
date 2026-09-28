@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && out=$(uv run pytest -q 2>&1) || { printf \"%s\\n\" \"$out\" >&2; exit 2; }",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in *.py|*.yaml|*.yml|*.toml) ;; *) exit 0 ;; esac; cd \"${CLAUDE_PROJECT_DIR:-.}\" && out=$(uv run pytest -q 2>&1) || { printf \"%s\\n\" \"$out\" >&2; exit 2; }",
             "timeout": 120,
             "statusMessage": "Running tests..."
           }

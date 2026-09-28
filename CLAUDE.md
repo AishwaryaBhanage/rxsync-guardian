@@ -8,23 +8,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Every feature starts from a spec in `specs/`. Read the spec before planning.
 - Plan first, then code in small steps. One feature per change.
 - Run `uv run pytest` after changes; never leave failing tests.
+- Run `uv run pytest -m slow` before every commit — full-scale checks are
+  deselected from the default run, so they are easy to skip silently.
 - Never commit `.env` or any secrets.
 - Explain any non-obvious code with a short comment.
 
 ## Project state
 
-Skeleton only. Every package listed under Architecture contains just a one-line
-docstring in `__init__.py` — no detection logic exists yet. The single test
-(`tests/test_db.py`) verifies database connectivity, nothing else. Expect to be
-writing first implementations rather than modifying existing behavior.
+`simulator` is partly built: step 1 of `specs/01-simulator.md` (the truth — 50
+pharmacies, 2,000 patients, 5,000 prescriptions, ~24k fill events) generates and
+writes `data/truth/*.csv`. Still to come: the three PMS exports (step 2), the
+planted faults and `data/faults.jsonl` (step 3), and the CLI (step 4) — so
+`python -m simulator.generate` does not exist yet; call `build_world` and
+`write_truth` directly until it does.
+
+Every other package under Architecture is still a one-line docstring in
+`__init__.py`.
+
+### Simulator invariants worth knowing before editing it
+
+- **Determinism is an acceptance criterion.** Output must be byte-identical for a
+  given `(seed, as_of)` pair. Draws come from stage-scoped RNGs
+  (`_rng(config, "stage")` in `simulator/world.py`) so adding a stage cannot
+  reshuffle earlier ones; Faker is locale-pinned and instance-seeded; CSVs are
+  written with `lineterminator="\n"`. Breaking any of these breaks a test.
+- **The 90-day window ends at `config.as_of`, never `today()`** — default
+  `2026-09-27`, see `simulator/config.py`.
+- **All timing goes through `simulator/schedule.py`.** `advance_business_hours`
+  consumes open hours only, which is the single reason a Sunday-closed pharmacy
+  never produces a Sunday timestamp. Do not compute event times elsewhere.
+- Processing-time jitter is lognormal with mu=0 (median exactly 1.0), so the
+  large-faster-than-small ordering holds by construction.
+- `World` is a plain frozen data holder; lookups belong in the `index_*` helpers
+  in `world.py` so exporters do not rescan ~24k events per prescription.
 
 ## Commands
 
 ```bash
 docker compose up -d                 # PostgreSQL 16; must be running for tests
 uv sync                              # install deps into .venv (Python 3.12)
-uv run pytest                        # full suite
+uv run pytest                        # fast suite (slow tests deselected)
+uv run pytest -m slow                # full-scale checks only; run before committing
 uv run pytest tests/test_db.py::test_select_one   # single test
+uv run python -m simulator.generate --seed 42 --out data   # regenerate data/ (step 4)
 uv run ruff check .                  # lint
 uv run ruff format .                 # format
 docker compose exec postgres psql -U rxsync -d rxsync   # psql shell
