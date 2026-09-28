@@ -1,0 +1,13 @@
+# Secrets and local environment
+.env
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Raw data is never committed (synthetic or not) -- keep the folder only
+data/raw/*
+!data/raw/.gitkeep

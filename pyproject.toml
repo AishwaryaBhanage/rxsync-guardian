@@ -1,0 +1,28 @@
+[project]
+name = "rxsync-guardian"
+version = "0.1.0"
+description = "Detect duplicate and out-of-sync prescriptions in synthetic pharmacy data"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "psycopg[binary]>=3.2",
+    "pandas>=2.2",
+    "faker>=30.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+# Flat package layout with no build-system: put the repo root on sys.path so
+# tests can import simulator/, dedup/, ... directly.
+pythonpath = ["."]
+testpaths = ["tests"]
