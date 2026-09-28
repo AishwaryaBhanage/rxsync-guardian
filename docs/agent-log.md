@@ -67,9 +67,64 @@ Notes on working with Claude Code on this project — what I steered, and what i
   - Test scale: took the small-world-by-default option and added the rule that I run
     `uv run pytest -m slow` before every commit, with CI to run them later.
   - Hook scope: guard it to `.py`, `.yaml`, `.yml` and `.toml`, not just `.py`.
-- Anything it got wrong:
+- Anything it got wrong (planning):
   - Ordering friction, not an error: I asked mid-turn for the decisions to go into the spec *before*
     the plan was written, but plan mode only permits edits to the plan file, so it could not comply
     at that moment. It said so plainly and made the spec edit the first action after approval rather
     than dropping the instruction.
-  - Implementation has not started yet — fill this in once the simulator is actually built.
+
+### Implementation
+
+- What I asked for: the four steps one at a time — truth data, the three PMS exporters, fault
+  planting plus `faults.jsonl`, then the CLI — each ending "add tests, stop when tests pass".
+  Committed after step 1; the rest is still uncommitted as of writing.
+- Result: `uv run python -m simulator.generate --seed 42 --out data` builds 50 pharmacies, 2,000
+  patients, 5,000 prescriptions, 24,064 fill events and 350 planted faults in ~1.3 s. 101 tests.
+  A concrete duplicate pair, from `pms_a.csv` — same Rx, three textual differences, which is what
+  `dedup` will have to match through:
+
+  ```
+  RX1000017,JAMES WHITE,01/13/1931,FLUOXETINE HCL 20 MG CAP,90,5,READY,08/12/2026 14:12,PH034
+  RX1000017,James White,1931-01-13,fluoxetine 20 mg capsule,90,5,READY,08/12/2026 14:12,PH034
+  ```
+
+- What I changed in its plan:
+  - **Processing speeds are wall-clock, not working hours.** It read "small rural ~18 hours" as 18
+    hours of *open* time, which came out at a 49.7 h elapsed median. I meant elapsed — ready the
+    next day. It kept counting open hours internally (the Sunday rule depends on that) and lowered
+    the bases instead.
+  - **Stop tuning by reasoning; measure.** After the correction it argued from analysis about which
+    values would work and proposed a number off the top of its head. I told it to sweep a few values
+    with a script and show me a table. See below — the measurement disagreed with its reasoning.
+  - Gave explicit targets with acceptable bands (large 1–4 h, medium 3–10 h, small 12–30 h) and
+    asked for a slow test per band, rather than only the "large faster than small" comparison.
+  - Questioned the fast/slow test split when `pytest` reported "7 deselected" and had it show me
+    `uv run pytest -m ""`, which runs everything in one go.
+- Anything it got wrong (implementation):
+  - **The wall-clock misreading is the same class of bug as the spec contradiction, and again my own
+    acceptance test would not have caught it.** The criterion was "large median < small median",
+    which passed comfortably at 2.3 h vs 49.7 h. Only because it printed the actual medians during
+    verification did the 49.7 h show up as absurd. Second time in this project that a passing test
+    sat on top of wrong data.
+  - **Reasoned instead of measuring, and its reasoning was wrong.** Once it actually swept the
+    parameters, the shape of the problem turned out to be different from what it had argued: elapsed
+    time is *bimodal* — a fill either finishes the same day or crosses a closure and absorbs the
+    ~16 h overnight gap. The sweep showed small jumping 7.45 h → 21.10 h between bases 5.0 and 5.5
+    with nothing in between, so a median of exactly 18 h does not exist at all. The 30-second script
+    settled what several turns of argument had not, and it had also proposed a medium value that the
+    table showed was not the best fit.
+  - **Three signature/call-site mismatches.** It edited a function's call site without its signature
+    (or the reverse) three times — `_build_prescriptions`, then `_received_at` twice. The PostToolUse
+    hook blocked each one within a second or two. This is the hook paying for itself; without it
+    each would have sat broken until the next manual test run.
+  - **A find-and-replace script aborted halfway through.** One of its Python heredocs asserted on a
+    code snippet that `ruff format` had already reflowed, so `schedule.py` got its edit and
+    `world.py` did not — leaving a call to a function that did not exist yet. Cause: it wrote the
+    replacement against the text as it had authored it, not as the formatter had left it on disk.
+  - Minor: a `tuple(x,)` in a test that tried to iterate `x` instead of making a one-tuple (caught
+    on the first run), and it assumed ruff's default rule set was narrower than it is — 0.16 also
+    enforces DTZ/PLR/UP/ISC/RUF, so the first real lint run produced nine findings.
+  - **Carried test debt for a few turns.** I said "implement step 3 only, add tests" and it wrote the
+    fault-planting code but not the tests — I interrupted with a question just as it started them,
+    and the debt survived until step 4. It did flag the gap itself when step 4 began, and wrote all
+    27 fault tests then, but for a few turns the answer key had no test behind it.

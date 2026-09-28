@@ -79,6 +79,39 @@ class FillEvent:
 
 
 @dataclass(frozen=True)
+class Fault:
+    """One deliberately planted defect, as recorded in the answer key."""
+
+    fault_id: str
+    type: str
+    rx_number: str
+    pharmacy_id: str
+    details: dict[str, object]
+
+    def as_record(self) -> dict[str, object]:
+        return {
+            "fault_id": self.fault_id,
+            "type": self.type,
+            "rx_number": self.rx_number,
+            "pharmacy_id": self.pharmacy_id,
+            "details": self.details,
+        }
+
+
+@dataclass(frozen=True)
+class FaultPlan:
+    """Every planted fault. At most one per prescription, so `by_rx` is total."""
+
+    faults: tuple[Fault, ...]
+
+    def by_rx(self) -> dict[str, Fault]:
+        return {fault.rx_number: fault for fault in self.faults}
+
+    def of_type(self, fault_type: str) -> tuple[Fault, ...]:
+        return tuple(fault for fault in self.faults if fault.type == fault_type)
+
+
+@dataclass(frozen=True)
 class World:
     config: SimConfig
     pharmacies: tuple[Pharmacy, ...]

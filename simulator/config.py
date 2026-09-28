@@ -42,6 +42,17 @@ class SimConfig:
     # Of the fills that are collected, the share delivered rather than picked up.
     delivered_share: float = 0.20
 
+    # Planted fault rates, as a share of prescriptions. Faults are disjoint, so
+    # these must sum to well under 1.0.
+    rate_duplicate: float = 0.03
+    rate_dropped: float = 0.01
+    rate_stale_status: float = 0.02
+    rate_phantom_schedule: float = 0.01
+
+    def fault_count(self, rate: float) -> int:
+        """How many prescriptions a given fault rate covers."""
+        return round(rate * self.n_prescriptions)
+
     @property
     def window_start(self) -> date:
         """First day a prescription can be written."""

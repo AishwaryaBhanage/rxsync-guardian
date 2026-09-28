@@ -7,8 +7,10 @@ so the formatting choices here are deliberate rather than incidental.
 from __future__ import annotations
 
 import csv
+import json
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from simulator.models import World
 from simulator.world import index_drugs
@@ -36,6 +38,30 @@ def write_csv(path: Path, header: tuple[str, ...], rows: list[tuple[object, ...]
         writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(header)
         writer.writerows(rows)
+
+
+def write_json(path: Path, payload: Any) -> None:
+    # sort_keys and a fixed indent keep the bytes stable across runs; newline=""
+    # stops the platform rewriting the \n that json.dump emits.
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True, ensure_ascii=True)
+        handle.write("\n")
+
+
+def write_jsonl(path: Path, records: list[Any]) -> None:
+    """One compact JSON object per line, keys sorted for stable bytes."""
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(
+                json.dumps(record, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+            )
+            handle.write("\n")
+
+
+def write_lines(path: Path, lines: list[str]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        for line in lines:
+            handle.write(line + "\n")
 
 
 def write_truth(world: World, out_dir: Path) -> dict[str, Path]:

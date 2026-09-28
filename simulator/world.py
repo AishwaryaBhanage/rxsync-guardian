@@ -84,6 +84,26 @@ def group_events_by_rx(world: World) -> dict[str, list[FillEvent]]:
     return grouped
 
 
+def ready_hours_by_size(world: World) -> dict[str, list[float]]:
+    """Wall-clock hours from `received` to `ready`, bucketed by pharmacy size.
+
+    Elapsed time, not working time: a fill that crosses a closure absorbs the
+    overnight gap. This is the measure the spec's speed targets are stated in.
+    """
+    pharmacies = index_pharmacies(world)
+    durations: dict[str, list[float]] = {"large": [], "medium": [], "small": []}
+    for events in group_events_by_rx(world).values():
+        by_fill: dict[int, dict[str, datetime]] = {}
+        for event in events:
+            by_fill.setdefault(event.fill_number, {})[event.status] = event.occurred_at
+        size = pharmacies[events[0].pharmacy_id].size
+        for statuses in by_fill.values():
+            if "received" in statuses and "ready" in statuses:
+                elapsed = statuses["ready"] - statuses["received"]
+                durations[size].append(elapsed.total_seconds() / 3600)
+    return durations
+
+
 # --- determinism helpers -------------------------------------------------
 
 

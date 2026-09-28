@@ -24,7 +24,7 @@ target-version = "py312"
 [tool.ruff.lint.per-file-ignores]
 # Pharmacy opening hours are local wall-clock time and the simulated world has
 # no timezone concept, so naive datetimes are the intended domain model.
-"tests/test_simulator.py" = ["DTZ001"]
+"tests/*.py" = ["DTZ001"]
 
 [tool.pytest.ini_options]
 # Flat package layout with no build-system: put the repo root on sys.path so
