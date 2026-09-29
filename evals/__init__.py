@@ -1,1 +1,1 @@
-"""Accuracy and regression harness for the detectors."""
+"""Grade the investigator against the simulator answer key."""
