@@ -152,6 +152,23 @@ Rules you must follow:
 Finish by calling submit_diagnosis exactly once."""
 
 
+SYSTEM_PROMPT_TEXT_ONLY = """You handle complaints about a pharmacy app on behalf \
+of a support team. A patient says something looks wrong.
+
+You have **no tools and no access to any records**. Answer from the complaint text
+alone, then call submit_diagnosis exactly once.
+
+Rules you must follow:
+- `evidence` must be empty. You have seen no records, so you can cite nothing.
+- Never guess an rx_number. You have not been given one, so pass null.
+- You are guessing from a description, so keep confidence low and say plainly in
+  the draft reply that the records still need checking.
+- The draft reply goes to a patient once a human approves it. Keep it short and
+  friendly, and give no medical advice of any kind.
+
+Finish by calling submit_diagnosis exactly once."""
+
+
 class _MessagesClient(Protocol):
     def create(self, **kwargs: Any) -> Any: ...
 
@@ -289,11 +306,12 @@ def investigate(
         investigative_used = sum(1 for call in calls if call.name != SUBMIT_TOOL["name"])
         budget_left = max(0, max_tool_calls - investigative_used)
         offered = [*TOOL_SCHEMAS, SUBMIT_TOOL] if budget_left else [SUBMIT_TOOL]
+        allowed = {tool["name"] for tool in offered}
 
         response = client.messages.create(
             model=model,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT if max_tool_calls else SYSTEM_PROMPT_TEXT_ONLY,
             tools=offered,
             messages=messages,
         )
@@ -325,7 +343,7 @@ def investigate(
                     submitted = None
                 continue
 
-            output, failed = _run_tool(block.name, arguments)
+            output, failed = _run_tool(block.name, arguments, allowed)
             calls.append(ToolCall(block.name, arguments, output, failed))
             _collect_ids(output, seen_ids)
             results.append(_result_block(block.id, output, failed))
@@ -390,8 +408,16 @@ def _opening_message(ticket_text: str, patient_id: str, budget: int) -> str:
     )
 
 
-def _run_tool(name: str, arguments: dict[str, Any]) -> tuple[Any, bool]:
-    """Run one of the investigative tools. Unknown tool names are a tool error."""
+def _run_tool(name: str, arguments: dict[str, Any], allowed: set[str]) -> tuple[Any, bool]:
+    """Run one investigative tool, but only if it was offered on this turn.
+
+    The offered set is the authorization boundary. A model can emit a tool_use
+    block for a tool it was never given — the system prompt mentions them all —
+    and dispatching straight from TOOL_FUNCTIONS would execute it anyway. That is
+    how the "no tools" eval baseline silently obtained real data.
+    """
+    if name not in allowed:
+        return {"error": f"tool {name!r} is not available to you"}, True
     function = TOOL_FUNCTIONS.get(name)
     if function is None:
         return {"error": f"no such tool {name!r}"}, True

@@ -430,8 +430,13 @@ def test_an_unknown_tool_name_is_a_tool_error_not_a_crash(world):
         ]
     )
     result = investigate("check", world["duplicate_patient"], client=client)
-    assert result.trace.tool_calls[0].is_error
-    assert "no such tool" in result.trace.tool_calls[0].output["error"]
+    failed = result.trace.tool_calls[0]
+    assert failed.is_error
+    # The allowed-set check runs first, so an invented name is reported as
+    # unavailable rather than nonexistent. That is the better answer anyway: it
+    # does not tell the model which tools exist but were withheld.
+    assert "delete_everything" in failed.output["error"]
+    assert "not available" in failed.output["error"]
 
 
 def test_bad_tool_arguments_are_a_tool_error_not_a_crash(world):
@@ -580,3 +585,86 @@ def test_prose_evidence_no_longer_produces_a_false_unverified_flag(world):
     result = investigate("check", patient_id, client=client)
     assert result.diagnosis.evidence == [seen]
     assert result.unverified_evidence == [], "a real id must not be flagged"
+
+
+# --- the offered set is the authorization boundary ------------------------
+
+
+def test_a_tool_that_was_not_offered_is_refused_not_executed(world):
+    """The bug that silently gave the "no tools" eval baseline real data.
+
+    A model can emit a tool_use block for a tool it was never given. Dispatching
+    from TOOL_FUNCTIONS without checking what was offered executes it anyway.
+    """
+    patient_id = world["duplicate_patient"]
+    client = FakeClient(
+        [
+            # max_tool_calls=0, so only submit_diagnosis was offered — yet the
+            # model asks for patient data.
+            FakeResponse([FakeToolUse("get_patient_view", {"patient_id": patient_id})]),
+            FakeResponse([_submit()]),
+        ]
+    )
+    result = investigate("check", patient_id, client=client, max_tool_calls=0)
+
+    refused = result.trace.tool_calls[0]
+    assert refused.name == "get_patient_view"
+    assert refused.is_error is True
+    assert "not available" in refused.output["error"]
+    # Crucially, no data came back.
+    assert "record_id" not in str(refused.output)
+
+
+def test_an_offered_tool_still_runs_normally(world):
+    patient_id = world["duplicate_patient"]
+    client = FakeClient(
+        [
+            FakeResponse([FakeToolUse("get_patient_view", {"patient_id": patient_id})]),
+            FakeResponse([_submit()]),
+        ]
+    )
+    result = investigate("check", patient_id, client=client, max_tool_calls=8)
+    ran = result.trace.tool_calls[0]
+    assert ran.is_error is False
+    assert isinstance(ran.output, list) and ran.output
+
+
+def test_tools_are_refused_once_the_budget_is_spent(world):
+    """After the budget, only submit is offered — so a late tool call is refused."""
+    patient_id = world["duplicate_patient"]
+    probe = FakeToolUse("get_patient_view", {"patient_id": patient_id})
+    client = FakeClient(
+        [
+            FakeResponse([probe]),  # allowed: budget of 1
+            FakeResponse([probe]),  # refused: budget spent
+            FakeResponse([_submit()]),
+        ]
+    )
+    result = investigate("check", patient_id, client=client, max_tool_calls=1)
+    assert result.trace.tool_calls[0].is_error is False
+    assert result.trace.tool_calls[1].is_error is True
+    assert "not available" in result.trace.tool_calls[1].output["error"]
+
+
+# --- the text-only run is told it has no tools ---------------------------
+
+
+def test_a_text_only_run_gets_the_no_tools_prompt(world):
+    client = FakeClient([FakeResponse([_submit()])])
+    investigate("check", world["duplicate_patient"], client=client, max_tool_calls=0)
+    system = client.messages.calls[0]["system"]
+    assert system == agent.SYSTEM_PROMPT_TEXT_ONLY
+    lowered = system.lower()
+    assert "no tools and no access to any records" in lowered
+    assert "`evidence` must be empty" in lowered
+    assert "keep confidence low" in lowered
+    # It must not advertise tools it cannot use.
+    for name in tools.TOOL_FUNCTIONS:
+        assert name not in system
+
+
+def test_a_tool_run_gets_the_investigating_prompt(world):
+    client = FakeClient([FakeResponse([_submit()])])
+    investigate("check", world["duplicate_patient"], client=client, max_tool_calls=8)
+    assert client.messages.calls[0]["system"] == agent.SYSTEM_PROMPT
+    assert "get_patient_view" in client.messages.calls[0]["system"]
