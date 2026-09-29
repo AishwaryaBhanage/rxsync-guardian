@@ -468,3 +468,115 @@ def test_submit_schema_is_in_the_anthropic_format():
         "draft_reply",
     }
     assert schema["properties"]["category"]["enum"] == list(CATEGORIES)
+
+
+# --- evidence must be bare identifiers, not prose ------------------------
+
+
+def test_the_evidence_schema_declares_the_id_pattern():
+    items = SUBMIT_TOOL["input_schema"]["properties"]["evidence"]["items"]
+    assert items["pattern"] == r"^(RX\d+|[ABC]\d{5})$"
+    assert items["type"] == "string"
+
+
+def test_the_evidence_description_forbids_sentences():
+    description = SUBMIT_TOOL["input_schema"]["properties"]["evidence"]["description"]
+    lowered = description.lower()
+    assert "identifiers only, no sentences" in lowered
+    assert "no commentary" in lowered
+    # Shows the model the wrong and right shapes explicitly.
+    assert "wrong:" in lowered and "right:" in lowered
+
+
+@pytest.mark.parametrize("identifier", ["RX1000017", "RX1", "A00006", "B12345", "C00964"])
+def test_valid_identifiers_are_accepted(world, identifier):
+    client = FakeClient([FakeResponse([_submit(evidence=[identifier])])])
+    result = investigate("check", world["duplicate_patient"], client=client)
+    assert result.diagnosis.evidence == [identifier]
+
+
+@pytest.mark.parametrize(
+    "not_an_id",
+    [
+        # The exact shape both real models drifted into on the stale ticket.
+        'C00008: patient view shows RX1000024 status "ready" at 2026-09-23T10:02:00',
+        "pharmacy records show escitalopram 10 mg tablet prescribed 2026-07-25",
+        "A00006 and A00007",
+        "A123",  # too few digits
+        "A000066",  # too many
+        "PT00832",  # a patient id is not evidence
+        "rx1000017",  # wrong case
+        "",
+    ],
+)
+def test_evidence_that_is_not_a_bare_identifier_is_rejected(world, not_an_id):
+    client = FakeClient(
+        [
+            FakeResponse([_submit(evidence=[not_an_id])]),
+            FakeResponse([_submit(evidence=["A00006"])]),
+        ]
+    )
+    result = investigate("check", world["duplicate_patient"], client=client)
+
+    rejected = result.trace.tool_calls[0]
+    assert rejected.is_error
+    assert "must be one bare identifier" in rejected.output
+    assert "not identifiers" in rejected.output
+    # The retry with a real id succeeds, so the feedback is actionable.
+    assert result.diagnosis.evidence == ["A00006"]
+
+
+def test_the_rejection_names_the_offending_entry_but_clips_it(world):
+    long_prose = "C00008: " + "x" * 200
+    client = FakeClient(
+        [
+            FakeResponse([_submit(evidence=["A00006", long_prose])]),
+            FakeResponse([_submit(evidence=["A00006"])]),
+        ]
+    )
+    result = investigate("check", world["duplicate_patient"], client=client)
+    message = result.trace.tool_calls[0].output
+    assert "C00008: xxx" in message  # named
+    assert "..." in message  # clipped
+    assert len(message) < 400  # not the whole 200-char blob
+    assert "A00006" not in message.split("not identifiers:")[1]  # only offenders listed
+
+
+def test_a_mix_of_good_and_bad_entries_is_rejected_wholesale(world):
+    client = FakeClient(
+        [
+            FakeResponse([_submit(evidence=["A00006", "explanation text"])]),
+            FakeResponse([_submit(evidence=["A00006"])]),
+        ]
+    )
+    result = investigate("check", world["duplicate_patient"], client=client)
+    assert result.trace.tool_calls[0].is_error
+    assert result.diagnosis.evidence == ["A00006"]
+
+
+def test_empty_evidence_is_still_allowed(world):
+    """A no_issue_found verdict may legitimately cite nothing."""
+    client = FakeClient([FakeResponse([_submit(category="no_issue_found", evidence=[])])])
+    result = investigate("check", world["duplicate_patient"], client=client)
+    assert result.diagnosis.evidence == []
+
+
+def test_prose_evidence_no_longer_produces_a_false_unverified_flag(world):
+    """The regression this fix exists for.
+
+    Before the pattern check, a correct observation wrapped around a real id was
+    accepted and then flagged unverified — a false positive that would corrupt an
+    eval scoring evidence precision. Now it is rejected at the door.
+    """
+    patient_id = world["duplicate_patient"]
+    seen = tools.get_patient_view(patient_id)[0]["record_id"]
+    client = FakeClient(
+        [
+            FakeResponse([FakeToolUse("get_patient_view", {"patient_id": patient_id})]),
+            FakeResponse([_submit(evidence=[f"{seen}: the app shows it twice"])]),
+            FakeResponse([_submit(evidence=[seen])]),
+        ]
+    )
+    result = investigate("check", patient_id, client=client)
+    assert result.diagnosis.evidence == [seen]
+    assert result.unverified_evidence == [], "a real id must not be flagged"

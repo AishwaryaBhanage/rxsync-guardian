@@ -18,6 +18,7 @@ and only takes the older `budget_tokens` thinking form, while Sonnet 5 wants
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
@@ -53,6 +54,12 @@ CATEGORIES = (
     "no_issue_found",
 )
 
+# An evidence entry is one bare identifier: an rx number or an app record id.
+# Models otherwise drift into "A00006: the app shows it twice", which reads as
+# unverifiable even when the observation is correct.
+EVIDENCE_PATTERN = r"^(RX\d+|[ABC]\d{5})$"
+_EVIDENCE_RE = re.compile(EVIDENCE_PATTERN)
+
 SUBMIT_TOOL: dict[str, Any] = {
     "name": "submit_diagnosis",
     "description": (
@@ -84,10 +91,14 @@ SUBMIT_TOOL: dict[str, Any] = {
             },
             "evidence": {
                 "type": "array",
-                "items": {"type": "string"},
+                "items": {"type": "string", "pattern": EVIDENCE_PATTERN},
                 "description": (
-                    "Record ids and rx numbers you actually saw in tool results, "
-                    "and which support this conclusion."
+                    "Identifiers only, no sentences. Each entry must be exactly one "
+                    "record id (like 'A00006') or one rx number (like 'RX1000017') "
+                    "that you saw in a tool result — nothing else, no explanation, "
+                    "no colons, no dates, no commentary. Put your reasoning in "
+                    "draft_reply instead. Wrong: 'A00006: the app shows it twice'. "
+                    "Right: 'A00006'."
                 ),
             },
             "confidence": {
@@ -419,6 +430,18 @@ def _parse_diagnosis(arguments: dict[str, Any]) -> tuple[Diagnosis | None, str |
     if not isinstance(evidence, list) or any(not isinstance(item, str) for item in evidence):
         return None, "error: evidence must be a list of strings"
 
+    # Reject prose the same way a bad category is rejected: name the offenders and
+    # restate the rule, so the model can correct itself on the next turn.
+    not_ids = [item for item in evidence if not _EVIDENCE_RE.match(item)]
+    if not_ids:
+        listed = ", ".join(f"{_clip(item)!r}" for item in not_ids)
+        return None, (
+            "error: every evidence entry must be one bare identifier — an rx number "
+            "like 'RX1000017' or a record id like 'A00006' — with no explanation, "
+            f"colons or dates. These are not identifiers: {listed}. Put the "
+            "reasoning in draft_reply and list only the ids here."
+        )
+
     rx_number = arguments.get("rx_number")
     if rx_number is not None and not isinstance(rx_number, str):
         return None, "error: rx_number must be a string or null"
@@ -433,6 +456,11 @@ def _parse_diagnosis(arguments: dict[str, Any]) -> tuple[Diagnosis | None, str |
         ),
         None,
     )
+
+
+def _clip(text: str, limit: int = 60) -> str:
+    """Keep a rejection message readable when the model sent a whole sentence."""
+    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def _collect_ids(output: Any, seen: set[str]) -> None:
