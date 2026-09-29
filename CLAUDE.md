@@ -8,22 +8,80 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Every feature starts from a spec in `specs/`. Read the spec before planning.
 - Plan first, then code in small steps. One feature per change.
 - Run `uv run pytest` after changes; never leave failing tests.
-- Run `uv run pytest -m slow` before every commit — full-scale checks are
-  deselected from the default run, so they are easy to skip silently.
+- Run `uv run pytest -m ""` before every commit — that runs everything, including
+  the full-scale checks the default run deselects.
 - Never commit `.env` or any secrets.
 - Explain any non-obvious code with a short comment.
+- Never return patient names from an investigator tool. Identify people by
+  `patient_id` only.
+
+## Goal
+
+**RxSync Investigator** is an LLM agent that investigates a patient complaint
+("my prescription shows up twice", "the app says ready but it isn't") using small
+pandas tools over synthetic pharmacy data, cites the records it used, and drafts a
+reply for a human to approve. It never acts on the patient's behalf.
+
+The data comes with an answer key. `simulator` plants four kinds of fault on
+purpose and records each one in `data/faults.jsonl`, so the agent's diagnoses are
+graded against ground truth rather than judged by eye.
 
 ## Project state
 
-`simulator` is partly built: step 1 of `specs/01-simulator.md` (the truth — 50
-pharmacies, 2,000 patients, 5,000 prescriptions, ~24k fill events) generates and
-writes `data/truth/*.csv`. Still to come: the three PMS exports (step 2), the
-planted faults and `data/faults.jsonl` (step 3), and the CLI (step 4) — so
-`python -m simulator.generate` does not exist yet; call `build_world` and
-`write_truth` directly until it does.
+- **`simulator` is complete** — `specs/01-simulator.md`, all four steps.
+  `uv run python -m simulator.generate --seed 42 --out data` writes the truth, the
+  three PMS exports, `data/app_view.csv` and the answer key in about a second.
+- **`investigator/tools.py` is complete** — the four tools below, plus
+  `TOOL_SCHEMAS` (Anthropic tool-use format) and a `TOOL_FUNCTIONS` dispatch map.
+- **`investigator/agent.py` is a placeholder.** No agent loop, no model choice, no
+  API calls yet. The `anthropic` SDK is a dependency but unused.
+- **`evals/` is an empty package.** Grading against `data/faults.jsonl` is not built.
+- There is no spec for the investigator yet. Write `specs/03-investigator.md`
+  before building the agent, per the Rules above.
 
-Every other package under Architecture is still a one-line docstring in
-`__init__.py`.
+## Architecture
+
+```
+simulator  ──>  data/app_view.csv  ──>  investigator  ──>  evals
+   │            data/truth/*.csv         tools.py           graded against
+   └──> data/faults.jsonl ─────────────────────────────────>  the answer key
+```
+
+- **simulator** — builds a synthetic pharmacy world (50 pharmacies, 2,000
+  patients, 5,000 prescriptions, ~24k fill events), exports it in three
+  disagreeing PMS formats, plants faults, and writes both the flattened
+  `app_view.csv` and the answer key.
+- **investigator** — `tools.py` reads the generated CSVs; `agent.py` will hold the
+  loop that drives Claude over those tools.
+- **evals** — will grade diagnoses against `data/faults.jsonl`.
+- **specs** — one spec per feature; written before the code.
+- **notebooks** — scratch exploration, not imported by anything.
+- **docs** — `agent-log.md`, a running record of what went wrong and why.
+
+### The four tools
+
+All in `investigator/tools.py`. All read-only, all identified by id, never by name.
+
+| Tool | Returns |
+| --- | --- |
+| `get_patient_view(patient_id)` | The rows the patient app showed — **faults included**: a duplicate appears twice with different spellings, a dropped prescription is missing, a stale row shows an old status. |
+| `get_pharmacy_records(patient_id)` | What the pharmacies' own records actually say. Comparing this against the app view *is* the investigation. |
+| `get_rx_history(rx_number)` | The status timeline from fill events; empty means on file but nothing dispensed. |
+| `get_pharmacy_speed(pharmacy_id)` | Median wall-clock hours received → ready, with size, area and Sunday closure for context. |
+
+Tool contracts, each covered by a test in `tests/test_tools.py`:
+
+- **No patient names.** `data/truth/patients.csv` is the only file with names and
+  `tools.py` never opens it.
+- **Unknown ids return `{"error": ...}`**, never raise. A tool error is something
+  the agent should read and recover from.
+- **`refill_on_schedule` is `None` when the source never sent it** (PMS A and C),
+  not `False`. Unknown and false are different answers.
+- **Data is loaded once**, cached per directory; `set_data_dir()` re-points it for
+  tests.
+- A patient counts as known if the *pharmacy records* mention them, not the app
+  view — so a patient whose only prescription was dropped returns `[]`, and that
+  empty view is itself the finding.
 
 ### Simulator invariants worth knowing before editing it
 
@@ -41,66 +99,47 @@ Every other package under Architecture is still a one-line docstring in
   large-faster-than-small ordering holds by construction.
 - `World` is a plain frozen data holder; lookups belong in the `index_*` helpers
   in `world.py` so exporters do not rescan ~24k events per prescription.
+- **`app_view.csv` is built from the same `build_records(world, pharmacies, plan)`
+  the three exports use**, so it cannot drift from them. Add a column there, not a
+  second code path.
 
 ## Commands
 
 ```bash
-docker compose up -d                 # PostgreSQL 16; must be running for tests
 uv sync                              # install deps into .venv (Python 3.12)
+uv run python -m simulator.generate --seed 42 --out data   # regenerate data/
 uv run pytest                        # fast suite (slow tests deselected)
-uv run pytest -m slow                # full-scale checks only; run before committing
-uv run pytest tests/test_db.py::test_select_one   # single test
-uv run python -m simulator.generate --seed 42 --out data   # regenerate data/ (step 4)
+uv run pytest -m ""                  # everything; run before committing
+uv run pytest -m slow                # only the full-scale checks
+uv run pytest tests/test_tools.py    # one file
+uv run pytest -k duplicate           # one topic
 uv run ruff check .                  # lint
 uv run ruff format .                 # format
-docker compose exec postgres psql -U rxsync -d rxsync   # psql shell
-docker compose down                  # stop db, keep the named volume
-docker compose down -v               # stop db and delete stored data
 ```
 
 Always invoke Python through `uv run`; there is no activated-venv workflow here.
 
+There is no database and no Docker. Everything reads and writes CSV, JSON and
+JSONL files under `data/`, all of which are gitignored and regenerable from
+`(seed, as_of)`.
+
 ## Environment
 
-`DATABASE_URL` and `POSTGRES_PASSWORD` come from `.env` (gitignored, copied from
-`.env.example`). Compose reads `.env` itself and fails loudly via
-`${POSTGRES_PASSWORD:?...}` if it is missing; test code loads it with
-`dotenv.load_dotenv()`, which does not override variables already set in the
-environment.
+`.env` (gitignored, copied from `.env.example`) holds `ANTHROPIC_API_KEY` for when
+the agent is built. Nothing reads it yet. `python-dotenv` is installed for that
+purpose.
 
-**The host port is 5433, not 5432.** A PostgreSQL server runs natively on this
-machine and owns `127.0.0.1:5432` / `[::1]:5432`, so `localhost:5432` reaches
-that server, not the container — connecting there fails with
-`role "rxsync" does not exist`. Inside the container and on the compose network
-the port is still 5432; only the host mapping is 5433. If a connection error
-mentions a missing role, check the port before suspecting the container.
+## Tests
 
-## Architecture
+141 tests. The default `uv run pytest` deselects `@pytest.mark.slow` — the
+full-scale checks that build the whole 5,000-prescription world — to keep the edit
+loop fast, because a PostToolUse hook runs the fast suite on every `.py`, `.yaml`,
+`.yml` or `.toml` edit. `uv run pytest -m ""` runs all of them and is the
+pre-commit rule.
 
-Packages are stages of one pipeline, in dependency order:
-
-`simulator` → `normalizer` → `dedup` / `desync` → `explainer` → `api` → `dashboard`
-
-- **simulator** — generates synthetic prescription records with Faker, deliberately
-  including the messiness the detectors exist to catch: near-duplicate spellings,
-  and the same prescription diverging across sources (quantity, directions, fill
-  status, prescriber).
-- **normalizer** — canonicalizes drug, patient, prescriber, and pharmacy fields so
-  records from different sources become comparable. Both detectors depend on its
-  output shape; changing it affects them together.
-- **dedup** — finds the same prescription recorded more than once.
-- **desync** — finds one prescription whose attributes disagree across sources.
-- **explainer** — turns a flag into a plain-language reason a pharmacist can act on.
-  Every flag is expected to carry one.
-- **copilot** — LLM-assisted review helpers layered on the detectors' output.
-- **evals** — accuracy and regression harness for the detectors.
-- **specs** — detection rules and data contracts (the rules live here, not inline
-  in detector code).
-- **infra** — deployment and database setup.
-
-**All data is synthetic.** Real patient or prescription data must never enter this
-repository. `data/raw/` is gitignored except for `.gitkeep`, so generated datasets
-stay local.
+Tests that need generated data build their own small world into `tmp_path` with
+`simulator.generate.generate(SimConfig.small(), out)` rather than depending on
+`data/` existing.
 
 ## Layout conventions
 

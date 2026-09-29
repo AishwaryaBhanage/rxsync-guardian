@@ -13,3 +13,4 @@ data/raw/*
 !data/raw/.gitkeep
 data/truth/
 data/faults.jsonl
+data/app_view.csv

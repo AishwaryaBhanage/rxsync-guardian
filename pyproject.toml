@@ -1,13 +1,12 @@
 [project]
-name = "rxsync-guardian"
-version = "0.1.0"
-description = "Detect duplicate and out-of-sync prescriptions in synthetic pharmacy data"
+name = "rxsync-investigator"
+version = "0.2.0"
+description = "LLM agent that investigates pharmacy complaints over synthetic data and cites its sources"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "psycopg[binary]>=3.2",
+    "anthropic>=1.0",
     "pandas>=2.2",
     "faker>=30.0",
-    "pyyaml>=6.0",
     "python-dotenv>=1.0",
 ]
 

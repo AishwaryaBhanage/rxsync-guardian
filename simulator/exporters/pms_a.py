@@ -36,6 +36,11 @@ def us_timestamp(moment: datetime) -> str:
     return f"{us_date(moment.date())} {moment:%H:%M}"
 
 
+def drug_display(record: ExportRecord) -> str:
+    """The drug string exactly as A prints it. Shared with `data/app_view.csv`."""
+    return record.drug.canonical_desc if record.is_duplicate_copy else record.drug.messy_desc
+
+
 def row_for(record: ExportRecord) -> tuple[object, ...]:
     current = record.current
     if record.is_duplicate_copy:
@@ -44,11 +49,10 @@ def row_for(record: ExportRecord) -> tuple[object, ...]:
         # the printed one. Same prescription, three small textual differences.
         name = record.patient.name.title()
         dob = record.patient.dob.isoformat()
-        drug = record.drug.canonical_desc
     else:
         name = record.patient.name.upper()  # A shouts; B and C do not
         dob = us_date(record.patient.dob)
-        drug = record.drug.messy_desc
+    drug = drug_display(record)
     return (
         record.rx.rx_number,
         name,

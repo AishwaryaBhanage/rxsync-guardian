@@ -16,15 +16,19 @@ from simulator.writers import iso_date, iso_timestamp, write_json
 FILENAME = "pms_b.json"
 
 
+def drug_display(record: ExportRecord) -> str:
+    """What B puts in its drug `name` field. Shared with `data/app_view.csv`.
+
+    B normally writes the bare canonical name and keeps strength and form in
+    sibling fields; the duplicate copy stuffs the whole messy string in here, so
+    even the tidy source contradicts itself across the pair.
+    """
+    return record.drug.messy_desc if record.is_duplicate_copy else record.drug.name
+
+
 def record_payload(record: ExportRecord) -> dict[str, Any]:
-    if record.is_duplicate_copy:
-        # B's copy shouts the name and prints the drug as one messy string in the
-        # name field, so even the tidy source contradicts itself across the pair.
-        patient_name = record.patient.name.upper()
-        drug_name = record.drug.messy_desc
-    else:
-        patient_name = record.patient.name
-        drug_name = record.drug.name
+    patient_name = record.patient.name.upper() if record.is_duplicate_copy else record.patient.name
+    drug_name = drug_display(record)
     return {
         "pharmacy": {
             "id": record.pharmacy.pharmacy_id,

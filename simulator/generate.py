@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
+from simulator.app_view import write_app_view
 from simulator.config import DEFAULT_AS_OF, DEFAULT_SEED, SimConfig
 from simulator.exporters import write_exports
 from simulator.faults import FAULT_TYPES, plant, write_answer_key
@@ -31,11 +32,17 @@ class GenerationResult:
     plan: FaultPlan
     truth_paths: dict[str, Path]
     raw_paths: dict[str, Path]
+    app_view: Path
     answer_key: Path
 
     @property
     def all_paths(self) -> list[Path]:
-        return [*self.truth_paths.values(), *self.raw_paths.values(), self.answer_key]
+        return [
+            *self.truth_paths.values(),
+            *self.raw_paths.values(),
+            self.app_view,
+            self.answer_key,
+        ]
 
 
 def generate(config: SimConfig, out_dir: Path) -> GenerationResult:
@@ -50,6 +57,7 @@ def generate(config: SimConfig, out_dir: Path) -> GenerationResult:
         plan=fault_plan,
         truth_paths=write_truth(world, out_dir),
         raw_paths=write_exports(world, out_dir, fault_plan),
+        app_view=write_app_view(world, out_dir, fault_plan),
         answer_key=write_answer_key(fault_plan, out_dir),
     )
 
@@ -99,7 +107,7 @@ def human_size(num_bytes: int) -> str:
 def format_summary(result: GenerationResult, out_dir: Path) -> str:
     config = result.world.config
     lines = [
-        "rxsync-guardian — synthetic dataset",
+        "rxsync-investigator — synthetic dataset",
         (
             f"  seed {config.seed}   as-of {config.as_of.isoformat()}   "
             f"window {config.window_days} days   "

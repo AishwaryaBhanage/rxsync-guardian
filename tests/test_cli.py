@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from simulator.app_view import FILENAME as APP_VIEW_FILENAME
 from simulator.config import DEFAULT_AS_OF, DEFAULT_SEED, SimConfig
 from simulator.faults import ANSWER_KEY_FILENAME
 from simulator.generate import build_parser, format_summary, generate, human_size, main
@@ -24,6 +25,7 @@ EXPECTED_FILES = (
     "raw/pms_a.csv",
     "raw/pms_b.json",
     "raw/pms_c.txt",
+    APP_VIEW_FILENAME,
     ANSWER_KEY_FILENAME,
 )
 
@@ -67,7 +69,7 @@ def test_main_returns_zero_and_prints_a_summary(tmp_path, capsys):
     # A real command-line invocation, at full default scale.
     assert main(["--out", str(tmp_path), "--seed", "1"]) == 0
     printed = capsys.readouterr().out
-    assert "rxsync-guardian" in printed
+    assert "rxsync-investigator" in printed
     assert "planted faults" in printed
     assert "median hours received -> ready" in printed
 

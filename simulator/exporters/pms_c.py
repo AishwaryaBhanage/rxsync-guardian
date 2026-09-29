@@ -40,18 +40,22 @@ def digits_only(phone: str) -> str:
     return "".join(character for character in phone if character.isdigit())
 
 
+def drug_display(record: ExportRecord) -> str:
+    """The drug string exactly as C prints it. Shared with `data/app_view.csv`."""
+    return record.drug.canonical_desc if record.is_duplicate_copy else record.drug.messy_desc
+
+
 def segments_for(record: ExportRecord) -> list[str]:
     """PID, RXO, then one STS per event (none for a prescription with no fills)."""
     if record.is_duplicate_copy:
-        # C's copy keeps the name in reading order, dashes the date, and uses the
-        # canonical drug name — C's conventions, inverted.
+        # C's copy keeps the name in reading order and dashes the date — C's
+        # conventions, inverted.
         name = record.patient.name.upper()
         dob = record.patient.dob.isoformat()
-        drug = record.drug.canonical_desc
     else:
         name = hl7_name(record.patient.name)
         dob = hl7_date(record.patient.dob)
-        drug = record.drug.messy_desc
+    drug = drug_display(record)
     segments = [
         "|".join(
             (
