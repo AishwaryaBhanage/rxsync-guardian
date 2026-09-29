@@ -351,3 +351,111 @@ def test_every_schema_argument_matches_the_function_signature():
     for schema in tools.TOOL_SCHEMAS:
         signature = inspect.signature(tools.TOOL_FUNCTIONS[schema["name"]])
         assert list(signature.parameters) == list(schema["input_schema"]["properties"])
+
+
+# --- the refill clock ----------------------------------------------------
+#
+# The agent has no clock of its own. Before these fields existed it used the
+# newest timestamp it happened to see as "now", which on half the
+# phantom_schedule tickets predated the refill due date and made the fault
+# unknowable. See docs/agent-log.md.
+
+
+def test_as_of_is_the_newest_event_in_the_dataset(dataset):
+    data = tools.dataset()
+    newest = max(data.fill_events["occurred_at"])[:10]
+    assert tools.as_of().isoformat() == newest
+
+
+def test_as_of_is_derived_from_data_not_from_the_simulator_constant(dataset):
+    """It must stay correct for a dataset built with a different --as-of."""
+    import inspect
+
+    source = inspect.getsource(tools)
+    assert "DEFAULT_AS_OF" not in source
+    assert "simulator.config" not in source
+
+
+def test_get_rx_history_reports_the_clock_and_the_arithmetic(dataset):
+    world = dataset["world"]
+    counts: dict[str, int] = {}
+    for event in world.fill_events:
+        counts[event.rx_number] = counts.get(event.rx_number, 0) + 1
+    rx_number = next(rx for rx, n in counts.items() if n >= 4)
+
+    history = tools.get_rx_history(rx_number)
+    for field in (
+        "as_of",
+        "refill_on_schedule",
+        "refills_remaining",
+        "days_supply",
+        "refill_due_date",
+        "days_overdue",
+    ):
+        assert field in history, f"{field} missing from get_rx_history"
+    assert history["as_of"] == tools.as_of().isoformat()
+    assert isinstance(history["refill_on_schedule"], bool)
+    assert isinstance(history["refills_remaining"], int)
+
+
+def test_the_due_date_is_the_last_collection_plus_the_supply(dataset):
+    from datetime import date, timedelta
+
+    world = dataset["world"]
+    collected = [e for e in world.fill_events if e.status in ("picked_up", "delivered")]
+    rx_number = collected[0].rx_number
+    history = tools.get_rx_history(rx_number)
+    supply = history["days_supply"]
+    last = max(
+        e.occurred_at.date()
+        for e in world.fill_events
+        if e.rx_number == rx_number and e.status in ("picked_up", "delivered")
+    )
+    assert history["refill_due_date"] == (last + timedelta(days=supply)).isoformat()
+    expected = (tools.as_of() - date.fromisoformat(history["refill_due_date"])).days
+    assert history["days_overdue"] == expected
+
+
+def test_days_overdue_is_negative_when_the_supply_is_still_running(dataset):
+    histories = [tools.get_rx_history(rx.rx_number) for rx in dataset["world"].prescriptions[:200]]
+    future = [h for h in histories if h.get("days_overdue") is not None and h["days_overdue"] < 0]
+    assert future, "expected some prescriptions still in supply"
+    for history in future:
+        assert history["refill_due_date"] > history["as_of"]
+
+
+def test_an_uncollected_prescription_has_no_due_date(dataset):
+    """A supply that was never picked up has not started, so nothing can be due."""
+    world = dataset["world"]
+    collected = {e.rx_number for e in world.fill_events if e.status in ("picked_up", "delivered")}
+    with_events = {e.rx_number for e in world.fill_events}
+    uncollected = [rx for rx in with_events - collected]
+    if not uncollected:
+        pytest.skip("this world has no uncollected prescription")
+    history = tools.get_rx_history(uncollected[0])
+    assert history["refill_due_date"] is None
+    assert history["days_overdue"] is None
+
+
+def test_a_phantom_refill_is_now_derivable_from_one_tool_call(dataset):
+    """sched on, refills left, overdue, and no fill above 0 — all in one place."""
+    import json
+
+    faults = [
+        json.loads(line) for line in (dataset["dir"] / "faults.jsonl").read_text().splitlines()
+    ]
+    phantoms = [f["rx_number"] for f in faults if f["type"] == "phantom_schedule"]
+    assert phantoms
+    derivable = 0
+    for rx_number in phantoms:
+        history = tools.get_rx_history(rx_number)
+        if (
+            history["refill_on_schedule"]
+            and history["refills_remaining"] > 0
+            and history["days_overdue"] is not None
+            and history["days_overdue"] > 0
+            and all(entry["fill"] == 0 for entry in history["timeline"])
+        ):
+            derivable += 1
+    # Every planted phantom must now be visible without guessing the date.
+    assert derivable == len(phantoms), f"only {derivable}/{len(phantoms)} derivable"

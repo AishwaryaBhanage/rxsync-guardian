@@ -666,5 +666,23 @@ def test_a_text_only_run_gets_the_no_tools_prompt(world):
 def test_a_tool_run_gets_the_investigating_prompt(world):
     client = FakeClient([FakeResponse([_submit()])])
     investigate("check", world["duplicate_patient"], client=client, max_tool_calls=8)
-    assert client.messages.calls[0]["system"] == agent.SYSTEM_PROMPT
-    assert "get_patient_view" in client.messages.calls[0]["system"]
+    system = client.messages.calls[0]["system"]
+    assert system == agent.system_prompt(tools.as_of().isoformat())
+    assert "get_patient_view" in system
+
+
+def test_the_prompt_states_the_date_and_forbids_date_arithmetic(world):
+    """The model has no clock; it must be given one and told not to guess."""
+    client = FakeClient([FakeResponse([_submit()])])
+    investigate("check", world["duplicate_patient"], client=client, max_tool_calls=8)
+    system = client.messages.calls[0]["system"]
+    assert f"Today is {tools.as_of().isoformat()}." in system
+    assert "do not do date arithmetic yourself" in system
+    assert "refill_due_date" in system and "days_overdue" in system
+
+
+def test_the_template_renders_whatever_date_it_is_given():
+    rendered = agent.system_prompt("2001-01-01")
+    assert "Today is 2001-01-01." in rendered
+    # The literal {"error": ...} example must survive formatting.
+    assert '{"error": ...}' in rendered

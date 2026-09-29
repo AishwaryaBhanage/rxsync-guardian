@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,11 @@ class DataSet:
     prescriptions: pd.DataFrame
     fill_events: pd.DataFrame
     pharmacies: pd.DataFrame
+    # The observation horizon: the newest event anywhere in the dataset. Nothing
+    # records the generator's --as-of, and inferring "now" per patient is wrong —
+    # a patient whose last event is two months old would look current. Derived
+    # from the data so it stays right whatever --as-of built it.
+    as_of: date
 
 
 _active_dir: Path = DEFAULT_DATA_DIR
@@ -65,14 +71,21 @@ def clear_cache() -> None:
     _cache.clear()
 
 
+def as_of() -> date:
+    """The date this dataset is current to. The agent has no other clock."""
+    return dataset().as_of
+
+
 def _read(data_dir: Path) -> DataSet:
     # Everything as strings except the few numeric columns we actually compute on,
     # so ids like "PT00067" keep their leading zeros.
+    events = pd.read_csv(data_dir / _FILL_EVENTS, dtype=str, keep_default_na=False)
     return DataSet(
         app_view=pd.read_csv(data_dir / _APP_VIEW, dtype=str, keep_default_na=False),
         prescriptions=pd.read_csv(data_dir / _PRESCRIPTIONS, dtype=str, keep_default_na=False),
-        fill_events=pd.read_csv(data_dir / _FILL_EVENTS, dtype=str, keep_default_na=False),
+        fill_events=events,
         pharmacies=pd.read_csv(data_dir / _PHARMACIES, dtype=str, keep_default_na=False),
+        as_of=date.fromisoformat(events["occurred_at"].max()[:10]),
     )
 
 
@@ -131,20 +144,35 @@ def get_rx_history(rx_number: str) -> dict[str, Any]:
     if known.empty:
         return {"error": f"unknown rx_number {rx_number!r}"}
 
+    rx = known.iloc[0]
     events = data.fill_events[data.fill_events["rx_number"] == rx_number]
     events = events.sort_values("occurred_at")
+    timeline = [
+        {
+            "fill": int(row["fill_number"]),
+            "status": row["status"],
+            "at": row["occurred_at"],
+        }
+        for _, row in events.iterrows()
+    ]
+
+    last_fill = max((entry["fill"] for entry in timeline), default=0)
+    due, overdue = _refill_due(timeline, int(rx["days_supply"]), data.as_of)
     return {
         "rx_number": rx_number,
-        "pharmacy_id": known.iloc[0]["pharmacy_id"],
+        "pharmacy_id": rx["pharmacy_id"],
+        # The clock and the arithmetic, done here so the model never has to.
+        "as_of": data.as_of.isoformat(),
+        "refill_on_schedule": rx["refill_on_schedule"] == "true",
+        "refills_remaining": max(0, int(rx["refills_authorized"]) - last_fill),
+        "days_supply": int(rx["days_supply"]),
+        # None when nothing has been collected: a supply that was never picked up
+        # has not started, so no refill can be due.
+        "refill_due_date": due.isoformat() if due else None,
+        # Negative means not due yet. None when there is no due date.
+        "days_overdue": overdue,
         # Empty for a prescription on file with nothing dispensed yet.
-        "timeline": [
-            {
-                "fill": int(row["fill_number"]),
-                "status": row["status"],
-                "at": row["occurred_at"],
-            }
-            for _, row in events.iterrows()
-        ],
+        "timeline": timeline,
     }
 
 
@@ -180,6 +208,23 @@ def _patient_exists(data: DataSet, patient_id: str) -> bool:
     what an investigation should notice.
     """
     return bool((data.prescriptions["patient_id"] == patient_id).any())
+
+
+def _refill_due(
+    timeline: list[dict[str, Any]], days_supply: int, today: date
+) -> tuple[date | None, int | None]:
+    """When the next refill was due, and how overdue it is.
+
+    Supply starts when the patient actually takes the medicine away, so the clock
+    runs from the last collection (picked_up or delivered) — not from `ready`,
+    which may still be sitting on the shelf.
+    """
+    collections = [entry for entry in timeline if entry["status"] in ("picked_up", "delivered")]
+    if not collections:
+        return None, None
+    collected = date.fromisoformat(collections[-1]["at"][:10])
+    due = collected + timedelta(days=days_supply)
+    return due, (today - due).days
 
 
 def _tri_state(value: str) -> bool | None:
@@ -262,7 +307,16 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "delivered, with a fill number per refill. An empty timeline means the "
             "prescription is on file but nothing has been dispensed. Use this to "
             "check whether a status the patient saw was simply stale, and whether "
-            "an expected refill ever happened."
+            "an expected refill ever happened.\n\n"
+            "It also returns the refill arithmetic already done for you: `as_of` "
+            "(today's date for this data), `refill_on_schedule`, "
+            "`refills_remaining`, `days_supply`, `refill_due_date` (when the "
+            "current supply runs out) and `days_overdue` (positive means a refill "
+            "is late, negative means it is not due yet, null means nothing has "
+            "been collected so no refill can be due). A refill that never happened "
+            "shows as refill_on_schedule true, refills_remaining above zero, "
+            "days_overdue positive, and no fill above 0 in the timeline. Do not "
+            "recompute these dates yourself."
         ),
         "input_schema": {
             "type": "object",

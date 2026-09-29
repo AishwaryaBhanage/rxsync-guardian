@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-09-29T02:38:53+00:00",
+  "generated_at": "2026-09-29T04:03:40+00:00",
   "runs": [
     {
-      "avg_evidence_ids": 1.896,
-      "avg_investigative_calls": 2.896,
-      "avg_latency_s": 7.58,
-      "avg_tool_calls": 3.896,
+      "avg_evidence_ids": 1.771,
+      "avg_investigative_calls": 3.104,
+      "avg_latency_s": 8.57,
+      "avg_tool_calls": 4.104,
       "calibration": [
         {
           "category_accuracy": null,
@@ -20,105 +20,19 @@
           "n": 0
         },
         {
-          "category_accuracy": 0.6667,
+          "category_accuracy": 1.0,
           "high": 0.9,
           "low": 0.7,
           "n": 3
         },
         {
-          "category_accuracy": 1.0,
+          "category_accuracy": 0.9778,
           "high": 1.0,
           "low": 0.9,
           "n": 45
         }
       ],
       "category_accuracy": 0.9792,
-      "confusion": {
-        "dropped": {
-          "dropped": 10,
-          "duplicate": 0,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 0
-        },
-        "duplicate": {
-          "dropped": 0,
-          "duplicate": 10,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 0
-        },
-        "no_issue_found": {
-          "dropped": 0,
-          "duplicate": 0,
-          "no_issue_found": 7,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 1
-        },
-        "phantom_schedule": {
-          "dropped": 0,
-          "duplicate": 0,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 10,
-          "stale_status": 0
-        },
-        "stale_status": {
-          "dropped": 0,
-          "duplicate": 0,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 10
-        }
-      },
-      "cost_per_ticket_usd": 0.010954,
-      "evidence_valid_rate": 1.0,
-      "incomplete": 0,
-      "label": "haiku+tools",
-      "model": "claude-haiku-4-5",
-      "rx_accuracy": 1.0,
-      "rx_scored": 40,
-      "tickets": 48,
-      "tickets_citing_nothing": 0,
-      "tools_enabled": true,
-      "total_cost_usd": 0.525771
-    },
-    {
-      "avg_evidence_ids": 1.979,
-      "avg_investigative_calls": 3.146,
-      "avg_latency_s": 10.75,
-      "avg_tool_calls": 4.146,
-      "calibration": [
-        {
-          "category_accuracy": null,
-          "high": 0.5,
-          "low": 0.0,
-          "n": 0
-        },
-        {
-          "category_accuracy": 0.3333,
-          "high": 0.7,
-          "low": 0.5,
-          "n": 3
-        },
-        {
-          "category_accuracy": 1.0,
-          "high": 0.9,
-          "low": 0.7,
-          "n": 17
-        },
-        {
-          "category_accuracy": 1.0,
-          "high": 1.0,
-          "low": 0.9,
-          "n": 28
-        }
-      ],
-      "category_accuracy": 0.9583,
       "confusion": {
         "dropped": {
           "dropped": 10,
@@ -149,92 +63,6 @@
           "duplicate": 0,
           "no_issue_found": 0,
           "none": 0,
-          "phantom_schedule": 9,
-          "stale_status": 1
-        },
-        "stale_status": {
-          "dropped": 0,
-          "duplicate": 0,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 10
-        }
-      },
-      "cost_per_ticket_usd": 0.026088,
-      "evidence_valid_rate": 1.0,
-      "incomplete": 0,
-      "label": "sonnet+tools",
-      "model": "claude-sonnet-5",
-      "rx_accuracy": 1.0,
-      "rx_scored": 40,
-      "tickets": 48,
-      "tickets_citing_nothing": 0,
-      "tools_enabled": true,
-      "total_cost_usd": 1.252222
-    },
-    {
-      "avg_evidence_ids": 0,
-      "avg_investigative_calls": 0,
-      "avg_latency_s": 3.49,
-      "avg_tool_calls": 1,
-      "calibration": [
-        {
-          "category_accuracy": 1.0,
-          "high": 0.5,
-          "low": 0.0,
-          "n": 44
-        },
-        {
-          "category_accuracy": 1.0,
-          "high": 0.7,
-          "low": 0.5,
-          "n": 4
-        },
-        {
-          "category_accuracy": null,
-          "high": 0.9,
-          "low": 0.7,
-          "n": 0
-        },
-        {
-          "category_accuracy": null,
-          "high": 1.0,
-          "low": 0.9,
-          "n": 0
-        }
-      ],
-      "category_accuracy": 1.0,
-      "confusion": {
-        "dropped": {
-          "dropped": 10,
-          "duplicate": 0,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 0
-        },
-        "duplicate": {
-          "dropped": 0,
-          "duplicate": 10,
-          "no_issue_found": 0,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 0
-        },
-        "no_issue_found": {
-          "dropped": 0,
-          "duplicate": 0,
-          "no_issue_found": 8,
-          "none": 0,
-          "phantom_schedule": 0,
-          "stale_status": 0
-        },
-        "phantom_schedule": {
-          "dropped": 0,
-          "duplicate": 0,
-          "no_issue_found": 0,
-          "none": 0,
           "phantom_schedule": 10,
           "stale_status": 0
         },
@@ -247,17 +75,17 @@
           "stale_status": 10
         }
       },
-      "cost_per_ticket_usd": 0.002774,
-      "evidence_valid_rate": null,
+      "cost_per_ticket_usd": 0.012435,
+      "evidence_valid_rate": 1.0,
       "incomplete": 0,
-      "label": "haiku-no-tools",
+      "label": "haiku+tools",
       "model": "claude-haiku-4-5",
-      "rx_accuracy": 0.0,
+      "rx_accuracy": 1.0,
       "rx_scored": 40,
       "tickets": 48,
-      "tickets_citing_nothing": 48,
-      "tools_enabled": false,
-      "total_cost_usd": 0.133145
+      "tickets_citing_nothing": 0,
+      "tools_enabled": true,
+      "total_cost_usd": 0.596867
     }
   ],
   "stopped_early": null

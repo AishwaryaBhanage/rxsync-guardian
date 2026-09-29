@@ -23,6 +23,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
+from investigator import tools as tools_module
 from investigator.tools import TOOL_FUNCTIONS, TOOL_SCHEMAS
 
 # Canonical ids from the Claude API reference. The dated spelling is accepted as an
@@ -124,7 +125,7 @@ SUBMIT_TOOL: dict[str, Any] = {
     },
 }
 
-SYSTEM_PROMPT = """You investigate complaints about a pharmacy app on behalf of a \
+SYSTEM_PROMPT_TEMPLATE = """You investigate complaints about a pharmacy app on behalf of a \
 support team. A patient says something looks wrong; your job is to work out what \
 actually happened and draft a reply for a human colleague to approve.
 
@@ -147,9 +148,22 @@ Rules you must follow:
   friendly, say what you found in plain words, and give no medical advice — never
   suggest starting, stopping, changing or delaying any medicine. If the patient
   needs clinical guidance, say a pharmacist will follow up.
-- A tool may return {"error": ...}. Read it and adjust; it is not a crash.
+- A tool may return {{"error": ...}}. Read it and adjust; it is not a crash.
+- Today is {as_of}. Use the computed refill_due_date and days_overdue from
+  get_rx_history; do not do date arithmetic yourself.
 
 Finish by calling submit_diagnosis exactly once."""
+
+
+def system_prompt(as_of: str) -> str:
+    """The investigating prompt with the dataset's date filled in.
+
+    The model has no clock of its own, and asking it to subtract dates it read out
+    of tool output is exactly the step it got wrong: it defaulted to the newest
+    timestamp it happened to see, which on half the phantom_schedule tickets
+    predated the refill due date and made the fault unknowable.
+    """
+    return SYSTEM_PROMPT_TEMPLATE.format(as_of=as_of)
 
 
 SYSTEM_PROMPT_TEXT_ONLY = """You handle complaints about a pharmacy app on behalf \
@@ -311,7 +325,11 @@ def investigate(
         response = client.messages.create(
             model=model,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT if max_tool_calls else SYSTEM_PROMPT_TEXT_ONLY,
+            system=(
+                system_prompt(tools_module.as_of().isoformat())
+                if max_tool_calls
+                else SYSTEM_PROMPT_TEXT_ONLY
+            ),
             tools=offered,
             messages=messages,
         )

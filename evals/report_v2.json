@@ -1,0 +1,178 @@
+{
+  "generated_at": "2026-09-29T03:30:17+00:00",
+  "runs": [
+    {
+      "avg_evidence_ids": 1.75,
+      "avg_investigative_calls": 3.083,
+      "avg_latency_s": 8.36,
+      "avg_tool_calls": 4.083,
+      "calibration": [
+        {
+          "category_accuracy": null,
+          "high": 0.5,
+          "low": 0.0,
+          "n": 0
+        },
+        {
+          "category_accuracy": 0.0,
+          "high": 0.7,
+          "low": 0.5,
+          "n": 2
+        },
+        {
+          "category_accuracy": 0.9,
+          "high": 0.9,
+          "low": 0.7,
+          "n": 10
+        },
+        {
+          "category_accuracy": 0.9444,
+          "high": 1.0,
+          "low": 0.9,
+          "n": 36
+        }
+      ],
+      "category_accuracy": 0.8958,
+      "confusion": {
+        "dropped": {
+          "dropped": 10,
+          "duplicate": 0,
+          "no_issue_found": 0,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "duplicate": {
+          "dropped": 0,
+          "duplicate": 10,
+          "no_issue_found": 0,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "no_issue_found": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 6,
+          "none": 0,
+          "phantom_schedule": 2,
+          "stale_status": 0
+        },
+        "phantom_schedule": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 3,
+          "none": 0,
+          "phantom_schedule": 7,
+          "stale_status": 0
+        },
+        "stale_status": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 0,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 10
+        }
+      },
+      "cost_per_ticket_usd": 0.011753,
+      "evidence_valid_rate": 1.0,
+      "incomplete": 0,
+      "label": "haiku+tools",
+      "model": "claude-haiku-4-5",
+      "rx_accuracy": 1.0,
+      "rx_scored": 40,
+      "tickets": 48,
+      "tickets_citing_nothing": 0,
+      "tools_enabled": true,
+      "total_cost_usd": 0.564143
+    },
+    {
+      "avg_evidence_ids": 0,
+      "avg_investigative_calls": 0,
+      "avg_latency_s": 3.64,
+      "avg_tool_calls": 1,
+      "calibration": [
+        {
+          "category_accuracy": 0.1667,
+          "high": 0.5,
+          "low": 0.0,
+          "n": 48
+        },
+        {
+          "category_accuracy": null,
+          "high": 0.7,
+          "low": 0.5,
+          "n": 0
+        },
+        {
+          "category_accuracy": null,
+          "high": 0.9,
+          "low": 0.7,
+          "n": 0
+        },
+        {
+          "category_accuracy": null,
+          "high": 1.0,
+          "low": 0.9,
+          "n": 0
+        }
+      ],
+      "category_accuracy": 0.1667,
+      "confusion": {
+        "dropped": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "duplicate": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "no_issue_found": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 8,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "phantom_schedule": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "stale_status": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        }
+      },
+      "cost_per_ticket_usd": 0.002841,
+      "evidence_valid_rate": null,
+      "incomplete": 0,
+      "label": "haiku-no-tools",
+      "model": "claude-haiku-4-5",
+      "rx_accuracy": 0.0,
+      "rx_scored": 40,
+      "tickets": 48,
+      "tickets_citing_nothing": 48,
+      "tools_enabled": false,
+      "total_cost_usd": 0.136373
+    }
+  ],
+  "stopped_early": null
+}

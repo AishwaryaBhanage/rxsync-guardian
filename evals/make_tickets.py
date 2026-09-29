@@ -25,6 +25,7 @@ import random
 import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 FAULT_CATEGORIES = ("duplicate", "dropped", "stale_status", "phantom_schedule")
@@ -186,6 +187,12 @@ class _Dataset:
     prescriptions: list[dict[str, str]]
     faults: list[dict[str, object]]
     events_by_rx: dict[str, int]
+    # Per rx: the last collection date and the highest fill number reached, plus
+    # the dataset's observation horizon. Together these decide whether an
+    # unplanted prescription merely *looks* like a phantom refill.
+    last_collection: dict[str, date]
+    max_fill: dict[str, int]
+    as_of: date
 
 
 def load_dataset(data_dir: Path) -> _Dataset:
@@ -199,11 +206,49 @@ def load_dataset(data_dir: Path) -> _Dataset:
         for line in (data_dir / "faults.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     event_counts: Counter[str] = Counter()
+    last_collection: dict[str, date] = {}
+    max_fill: dict[str, int] = {}
+    newest = ""
     for row in csv.DictReader(
         (data_dir / "truth" / "fill_events.csv").read_text(encoding="utf-8").splitlines()
     ):
-        event_counts[row["rx_number"]] += 1
-    return _Dataset(prescriptions, faults, dict(event_counts))
+        rx = row["rx_number"]
+        event_counts[rx] += 1
+        newest = max(newest, row["occurred_at"])
+        max_fill[rx] = max(max_fill.get(rx, 0), int(row["fill_number"]))
+        if row["status"] in ("picked_up", "delivered"):
+            when = date.fromisoformat(row["occurred_at"][:10])
+            if rx not in last_collection or when > last_collection[rx]:
+                last_collection[rx] = when
+    return _Dataset(
+        prescriptions,
+        faults,
+        dict(event_counts),
+        last_collection,
+        max_fill,
+        date.fromisoformat(newest[:10]),
+    )
+
+
+def looks_like_phantom(row: dict[str, str], data: _Dataset) -> bool:
+    """Would this prescription read as a phantom refill even though none was planted?
+
+    Auto-refill on, refills still available, the supply exhausted by the
+    observation date, and no refill event on record.
+    """
+    return _looks_like_phantom(row, data)
+
+
+def _looks_like_phantom(row: dict[str, str], data: _Dataset) -> bool:
+    if row["refill_on_schedule"] != "true" or int(row["refills_authorized"]) == 0:
+        return False
+    rx = row["rx_number"]
+    if data.max_fill.get(rx, 0) > 0:
+        return False  # a refill did happen
+    collected = data.last_collection.get(rx)
+    if collected is None:
+        return False  # never collected, so no supply is running
+    return collected + timedelta(days=int(row["days_supply"])) < data.as_of
 
 
 def build_tickets(data_dir: Path, seed: int = DEFAULT_SEED) -> list[Ticket]:
@@ -245,10 +290,18 @@ def build_tickets(data_dir: Path, seed: int = DEFAULT_SEED) -> list[Ticket]:
         for f in data.faults
         if str(f["rx_number"]) in rx_by_number
     }
+    # A no_issue_found ticket must not be answerable as a fault. An unplanted
+    # prescription with auto-refill on, refills left, and a supply that ran out
+    # with no refill recorded is indistinguishable from a planted phantom, so any
+    # patient holding one is excluded rather than graded on an ambiguous key.
+    lookalike_patients = {
+        row["patient_id"] for row in data.prescriptions if _looks_like_phantom(row, data)
+    }
     clean = [
         row
         for row in data.prescriptions
         if row["patient_id"] not in faulty_patients
+        and row["patient_id"] not in lookalike_patients
         and unambiguous(row)
         # Something must have happened to it, or "is it ready?" has no answer.
         and data.events_by_rx.get(row["rx_number"], 0) > 0
@@ -339,6 +392,97 @@ def _assert_no_giveaway(text: str, category: str) -> None:
             raise AssertionError(f"the {category} template leaks the word {word!r}: {text!r}")
 
 
+# --- v2: neutral wording, shared across every category --------------------
+#
+# The v1 templates paraphrase the label too closely — "in there two times" is a
+# 1:1 giveaway for `duplicate` — so a model scored 100% on category from the text
+# alone, with no tools. These say only that something needs looking at, and the
+# same pool serves every category, so the wording carries no signal about which
+# fault it is.
+NEUTRAL_TEMPLATES: tuple[str, ...] = (
+    "Something looks off with my {drug}. Can you take a look?",
+    "Can you check on my {drug} for me?",
+    "I'm not sure what's going on with my {drug} — could someone look into it?",
+    "Hi, would you mind checking my {drug} please?",
+    "There's something not right with my {drug}. Are you able to help?",
+    "Please could you look into my {drug}? It doesn't seem right to me.",
+    "I have a question about my {drug} — can you check what's happening with it?",
+    "Could someone take a look at my {drug}? I'm a bit confused by it.",
+    "Would you be able to check my {drug}? Something seems wrong.",
+    "I'd like someone to look at my {drug} when you get a chance.",
+)
+
+
+def template_of(text: str, templates: tuple[str, ...] = NEUTRAL_TEMPLATES) -> str | None:
+    """Which template produced this text, matched on its fixed prefix and suffix."""
+    for template in templates:
+        prefix, _, suffix = template.partition("{drug}")
+        if text.startswith(prefix) and text.endswith(suffix):
+            return template
+    return None
+
+
+def neutralize(tickets: list[Ticket], seed: int = DEFAULT_SEED) -> list[Ticket]:
+    """Rewrite each ticket's text neutrally, keeping everything else identical.
+
+    Derived from an existing set rather than re-selected, so the patients and the
+    ground truth are provably the same and the only variable between versions is
+    the wording. Templates are assigned by rotating a seed-shuffled pool, which
+    guarantees each one is used across several categories instead of correlating
+    with any single label.
+    """
+    pool = list(NEUTRAL_TEMPLATES)
+    random.Random(f"{seed}:neutral").shuffle(pool)
+
+    rewritten = []
+    for index, ticket in enumerate(tickets):
+        drug = _drug_in(ticket.text)
+        if drug is None:
+            raise ValueError(f"{ticket.ticket_id}: no drug name found in {ticket.text!r}")
+        text = pool[index % len(pool)].format(drug=drug)
+        _assert_no_giveaway(text, ticket.ground_truth.category)
+        rewritten.append(
+            Ticket(
+                ticket_id=ticket.ticket_id,
+                text=text,
+                patient_id=ticket.patient_id,
+                ground_truth=ticket.ground_truth,
+            )
+        )
+    return rewritten
+
+
+def _drug_in(text: str) -> str | None:
+    """The formulary drug this text names, longest first so compounds win."""
+    from simulator.drugs import DRUGS
+
+    for drug in sorted(DRUGS, key=lambda d: -len(d.name)):
+        if drug.name in text:
+            return drug.name
+    return None
+
+
+def read_tickets(path: Path) -> list[Ticket]:
+    """Load a written ticket set back into Ticket objects."""
+    loaded = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line:
+            continue
+        record = json.loads(line)
+        loaded.append(
+            Ticket(
+                ticket_id=record["ticket_id"],
+                text=record["text"],
+                patient_id=record["patient_id"],
+                ground_truth=GroundTruth(
+                    category=record["ground_truth"]["category"],
+                    rx_number=record["ground_truth"]["rx_number"],
+                ),
+            )
+        )
+    return loaded
+
+
 # --- CLI ------------------------------------------------------------------
 
 
@@ -348,7 +492,45 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=Path("evals") / "tickets.jsonl")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--samples", type=int, default=5, help="how many to print")
+    parser.add_argument(
+        "--style",
+        choices=("labelled", "neutral"),
+        default="labelled",
+        help="labelled: v1 per-category wording. neutral: v2 shared wording.",
+    )
+    parser.add_argument(
+        "--from",
+        dest="source",
+        type=Path,
+        default=None,
+        help="neutral style only: the ticket set to rewrite, keeping its ground truth",
+    )
     args = parser.parse_args(argv)
+
+    if args.style == "neutral":
+        if args.source is None or not args.source.exists():
+            print(
+                "--style neutral needs --from pointing at an existing ticket set, "
+                "so the patients and ground truth carry over unchanged.",
+                file=sys.stderr,
+            )
+            return 1
+        tickets = neutralize(read_tickets(args.source), args.seed)
+        path = write_tickets(tickets, args.out)
+        tally = Counter(ticket.ground_truth.category for ticket in tickets)
+        print(f"Wrote {len(tickets)} neutral tickets to {path} (from {args.source})")
+        for category in CATEGORIES:
+            print(f"  {category:<20}{tally[category]:>4}")
+        if args.samples:
+            print(f"\n{'=' * 78}\n{min(args.samples, len(tickets))} samples\n{'=' * 78}")
+            for ticket in tickets[: args.samples]:
+                print(f"\n{ticket.ticket_id}  patient {ticket.patient_id}")
+                print(f'  "{ticket.text}"')
+                print(
+                    f"  -> truth: {ticket.ground_truth.category}, "
+                    f"rx={ticket.ground_truth.rx_number}"
+                )
+        return 0
 
     if not (args.data / "faults.jsonl").exists():
         print(
