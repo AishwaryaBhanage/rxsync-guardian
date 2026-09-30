@@ -122,7 +122,11 @@ def _investigate(request: Request, client: Any) -> Response:
 
     patient_id = str(payload.get("patient_id") or "").strip()
     ticket_text = str(payload.get("ticket_text") or "").strip()
-    model = str(payload.get("model") or DEFAULT_MODEL).strip()
+    # Only an absent (or null) model means "use the default". An empty or blank
+    # string is a bad value, not a missing one: `or DEFAULT_MODEL` used to turn ""
+    # into Haiku, which sent a real API call from a test that expected a 400.
+    raw_model = payload.get("model")
+    model = DEFAULT_MODEL if raw_model is None else str(raw_model).strip()
 
     if not patient_id:
         return Response(400, {"error": "patient_id is required"})

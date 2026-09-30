@@ -314,16 +314,20 @@ def test_sonnet_is_accepted(world):
     assert body["model"] == SONNET
 
 
-@pytest.mark.parametrize("model", ["claude-opus-5", "gpt-4", "haiku", ""])
+@pytest.mark.parametrize("model", ["claude-opus-5", "gpt-4", "haiku", "", "   ", 5])
 def test_any_other_model_is_rejected(world, model):
+    # No client is passed on purpose: a rejected model must be refused before any
+    # Anthropic client exists, and the conftest guard fails the test if one is built.
     payload = {"patient_id": world["patient"], "ticket_text": "hi", "model": model}
     response = _post("/investigate", payload)
-    if model == "":
-        # Empty falls back to the default rather than erroring.
-        assert response.status in (200, 400)
-    else:
-        assert response.status == 400
-        assert "model must be one of" in response.body["error"]
+    assert response.status == 400
+    assert "model must be one of" in response.body["error"]
+
+
+def test_a_null_model_means_the_default(world):
+    client = FakeClient([FakeResponse([_submit()])])
+    payload = {"patient_id": world["patient"], "ticket_text": "hi", "model": None}
+    assert _post("/investigate", payload, client=client).body["model"] == HAIKU
 
 
 @pytest.mark.parametrize(

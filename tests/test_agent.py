@@ -699,3 +699,23 @@ def test_the_template_renders_whatever_date_it_is_given():
     assert "Today is 2001-01-01." in rendered
     # The literal {"error": ...} example must survive formatting.
     assert '{"error": ...}' in rendered
+
+
+# --- the no-real-API guard in conftest.py ----------------------------------
+
+
+def test_the_suite_runs_without_an_api_key():
+    import os
+
+    assert "ANTHROPIC_API_KEY" not in os.environ
+
+
+def test_building_a_real_client_fails_the_test_loudly():
+    # Even with .env present, default_client() must not get as far as a client.
+    with pytest.raises(pytest.fail.Exception, match="real Anthropic client"):
+        agent.default_client()
+
+
+def test_investigate_without_a_fake_client_fails_the_test_loudly(world):
+    with pytest.raises(pytest.fail.Exception, match="real Anthropic client"):
+        investigate("hello", world["duplicate_patient"])
