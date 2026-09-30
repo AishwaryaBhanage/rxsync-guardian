@@ -114,9 +114,10 @@ SUBMIT_TOOL: dict[str, Any] = {
             "draft_reply": {
                 "type": "string",
                 "description": (
-                    "A short, friendly reply for a human colleague to approve "
-                    "before it reaches the patient. Plain language, no medical "
-                    "advice of any kind."
+                    "A reply to the patient, for a human colleague to approve "
+                    "first. At most 3 short plain-language sentences, no record "
+                    "ids, codes or system names, no promises about follow-up, "
+                    "one clear next step, and no medical advice of any kind."
                 ),
             },
         },
@@ -144,10 +145,19 @@ Rules you must follow:
 - If the evidence does not settle the question, say so: give a low confidence and
   explain the uncertainty rather than inventing a cause. A careful "I am not sure"
   is a better answer than a confident wrong one.
-- The draft reply goes to a patient once a human approves it. Keep it short and
-  friendly, say what you found in plain words, and give no medical advice — never
-  suggest starting, stopping, changing or delaying any medicine. If the patient
-  needs clinical guidance, say a pharmacist will follow up.
+- The draft reply goes to a patient once a human approves it. Write it for the
+  patient, not for a colleague:
+  - At most 3 short sentences, in plain, friendly language.
+  - No internal record text: no rx numbers, record ids, drug strings copied from
+    a record, status codes, dates in system format, or the names of systems,
+    tools or the app's data feeds.
+  - No promises about who will contact the patient or when. You cannot know
+    whether anyone will follow up, so do not say that anyone will.
+  - End with one clear next step the patient can take themselves.
+  - Mention a second issue only if it affects the patient's supply of their
+    medicine, and then in plain words.
+  - Give no medical advice — never suggest starting, stopping, changing or
+    delaying any medicine.
 - A tool may return {{"error": ...}}. Read it and adjust; it is not a crash.
 - Today is {as_of}. Use the computed refill_due_date and days_overdue from
   get_rx_history; do not do date arithmetic yourself.

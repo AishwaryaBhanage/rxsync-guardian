@@ -63,7 +63,7 @@ export function categoryMeta(category: string): CategoryMeta {
   );
 }
 
-export type BandName = "high" | "medium" | "low";
+export type BandName = "high" | "check";
 
 export interface Band {
   name: BandName;
@@ -73,31 +73,27 @@ export interface Band {
   guidance: string;
 }
 
-/** Bands match the eval's calibration buckets so the UI and the report agree. */
+/** Below this the agent's answer is a lead to check, not a verdict to approve. */
+export const HUMAN_CHECK_BELOW = 0.8;
+
 export function confidenceBand(confidence: number): Band {
-  if (confidence >= 0.85) {
+  if (confidence >= HUMAN_CHECK_BELOW) {
     return {
       name: "high",
       label: "High confidence",
-      guidance: "Evidence is consistent. Read the draft, then send.",
-    };
-  }
-  if (confidence >= 0.6) {
-    return {
-      name: "medium",
-      label: "Medium confidence",
-      guidance: "Open the cited records below before you send this.",
+      guidance: "Evidence is consistent. Read the draft, then approve & copy.",
     };
   }
   return {
-    name: "low",
-    label: "Low confidence",
-    guidance: "Treat this as a hint only. Verify manually before replying.",
+    name: "check",
+    label: "Needs human check",
+    guidance: "Open the cited records below and confirm the finding before you approve.",
   };
 }
 
 /** Human labels and per-ticket cost, so the picker is not raw model ids. */
 export const MODEL_META: Record<Model, { label: string; note: string }> = {
   "claude-haiku-4-5": { label: "Haiku 4.5", note: "fast · ~$0.012 a ticket" },
-  "claude-sonnet-5": { label: "Sonnet 5", note: "slower · ~3–4× the cost" },
+  // From the v1 eval, the only run that included Sonnet: $0.026 vs Haiku's $0.011.
+  "claude-sonnet-5": { label: "Sonnet 5", note: "slower · ~2.4× the cost" },
 };

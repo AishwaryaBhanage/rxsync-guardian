@@ -260,7 +260,8 @@ code, pre, kbd { font-family: var(--mono); }
 }
 .queue-empty { padding: 18px 12px; font-size: 13px; color: var(--ink-faint); text-align: center; }
 
-.work { padding: 20px; display: grid; gap: 16px; align-content: start; max-width: 1000px; }
+/* minmax(0, 1fr): an auto column would grow to the eval table, not scroll it. */
+.work { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; max-width: 1000px; }
 /* The eval tab has no rail beside it, so it centres in the viewport instead. */
 .work-center { margin-inline: auto; max-width: 1060px; }
 
@@ -276,7 +277,7 @@ code, pre, kbd { font-family: var(--mono); }
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: center;
+  align-items: end;
   justify-content: space-between;
   padding-top: 12px;
   border-top: 1px solid var(--line);
@@ -323,6 +324,7 @@ textarea {
 textarea { resize: vertical; line-height: 1.55; }
 input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 select { padding-right: 32px; }
+.model-field { flex: 0 1 220px; min-width: 180px; }
 .count { justify-self: end; font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 
 .combo { position: relative; }
@@ -391,8 +393,7 @@ kbd { font-size: 11px; padding: 1.5px 5px; border: 1px solid var(--line-strong);
 .meter { height: 4px; border-radius: 999px; background: var(--sunken); overflow: hidden; margin-top: 6px; }
 .meter > span { display: block; height: 100%; border-radius: 999px; background: currentColor; }
 .band-high { color: var(--ok); }
-.band-medium { color: var(--warn); }
-.band-low { color: var(--danger); }
+.band-check { color: var(--warn); }
 
 /* --- results grid: reply gets the width, evidence the sidebar ---------- */
 .result-grid {
@@ -478,6 +479,12 @@ table.eval tbody tr:hover td { background: var(--sunken); }
 .pill { font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--sunken); color: var(--ink-faint); }
 .pill.on { color: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
 .best { font-weight: 700; color: var(--ok); }
+/* Superseded eval rows stay visible for the story but must not read as results. */
+table.eval tr.superseded td, table.eval tr.superseded th { color: var(--ink-faint); }
+table.eval tr.superseded .pill.on { color: var(--ink-faint); background: var(--sunken); border-color: var(--line); }
+.tag-superseded { display: block; font-family: var(--sans); font-weight: 500; font-size: 11px; white-space: normal; max-width: 12ch; margin-top: 4px; }
+.stat .sub { font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.last-run { font-size: 12.5px; color: var(--ink-faint); }
 .version-notes { margin: 0; padding-left: 18px; display: grid; gap: 7px; font-size: 13px; color: var(--ink-soft); }
 
 /* --- loading & empty ----------------------------------------------------- */

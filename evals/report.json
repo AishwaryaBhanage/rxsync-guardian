@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-09-29T04:03:40+00:00",
+  "generated_at": "2026-09-30T03:14:52+00:00",
   "runs": [
     {
       "avg_evidence_ids": 1.771,
-      "avg_investigative_calls": 3.104,
-      "avg_latency_s": 8.57,
-      "avg_tool_calls": 4.104,
+      "avg_investigative_calls": 3.062,
+      "avg_latency_s": 7.19,
+      "avg_tool_calls": 4.062,
       "calibration": [
         {
           "category_accuracy": null,
@@ -20,19 +20,19 @@
           "n": 0
         },
         {
-          "category_accuracy": 1.0,
+          "category_accuracy": 0.0,
           "high": 0.9,
           "low": 0.7,
-          "n": 3
+          "n": 2
         },
         {
-          "category_accuracy": 0.9778,
+          "category_accuracy": 1.0,
           "high": 1.0,
           "low": 0.9,
-          "n": 45
+          "n": 46
         }
       ],
-      "category_accuracy": 0.9792,
+      "category_accuracy": 0.9583,
       "confusion": {
         "dropped": {
           "dropped": 10,
@@ -53,9 +53,9 @@
         "no_issue_found": {
           "dropped": 0,
           "duplicate": 0,
-          "no_issue_found": 7,
+          "no_issue_found": 6,
           "none": 0,
-          "phantom_schedule": 1,
+          "phantom_schedule": 2,
           "stale_status": 0
         },
         "phantom_schedule": {
@@ -75,7 +75,7 @@
           "stale_status": 10
         }
       },
-      "cost_per_ticket_usd": 0.012435,
+      "cost_per_ticket_usd": 0.012506,
       "evidence_valid_rate": 1.0,
       "incomplete": 0,
       "label": "haiku+tools",
@@ -85,7 +85,93 @@
       "tickets": 48,
       "tickets_citing_nothing": 0,
       "tools_enabled": true,
-      "total_cost_usd": 0.596867
+      "total_cost_usd": 0.600269
+    },
+    {
+      "avg_evidence_ids": 0,
+      "avg_investigative_calls": 0,
+      "avg_latency_s": 3.13,
+      "avg_tool_calls": 1,
+      "calibration": [
+        {
+          "category_accuracy": 0.1667,
+          "high": 0.5,
+          "low": 0.0,
+          "n": 48
+        },
+        {
+          "category_accuracy": null,
+          "high": 0.7,
+          "low": 0.5,
+          "n": 0
+        },
+        {
+          "category_accuracy": null,
+          "high": 0.9,
+          "low": 0.7,
+          "n": 0
+        },
+        {
+          "category_accuracy": null,
+          "high": 1.0,
+          "low": 0.9,
+          "n": 0
+        }
+      ],
+      "category_accuracy": 0.1667,
+      "confusion": {
+        "dropped": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "duplicate": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "no_issue_found": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 8,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "phantom_schedule": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        },
+        "stale_status": {
+          "dropped": 0,
+          "duplicate": 0,
+          "no_issue_found": 10,
+          "none": 0,
+          "phantom_schedule": 0,
+          "stale_status": 0
+        }
+      },
+      "cost_per_ticket_usd": 0.00275,
+      "evidence_valid_rate": null,
+      "incomplete": 0,
+      "label": "haiku-no-tools",
+      "model": "claude-haiku-4-5",
+      "rx_accuracy": 0.0,
+      "rx_scored": 40,
+      "tickets": 48,
+      "tickets_citing_nothing": 48,
+      "tools_enabled": false,
+      "total_cost_usd": 0.132012
     }
   ],
   "stopped_early": null

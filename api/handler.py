@@ -37,7 +37,7 @@ REPORT_FILES = {
 REPORT_NOTES = {
     "v1": "Per-category wording: the complaint paraphrased the label.",
     "v2": "Neutral wording shared by every category.",
-    "v2.1": "Neutral wording, and the tools compute refill dates.",
+    "v2.1": "Neutral wording, tools compute refill dates, stricter draft-reply rules.",
 }
 
 

@@ -274,6 +274,19 @@ def test_the_system_prompt_carries_the_three_rules(world):
     assert "low confidence" in system
 
 
+def test_the_system_prompt_sets_the_draft_reply_rules(world):
+    client = FakeClient([FakeResponse([_submit()])])
+    investigate("hello", world["duplicate_patient"], client=client)
+    system = client.messages.calls[0]["system"].lower()
+    assert "at most 3 short sentences" in system
+    assert "no internal record text" in system
+    assert "no promises about who will contact the patient" in system
+    assert "one clear next step" in system
+    assert "second issue only if it affects the patient's supply" in system
+    # The old rule told the model to promise a pharmacist would follow up.
+    assert "a pharmacist will follow up" not in system
+
+
 def test_the_ticket_and_patient_id_reach_the_model(world):
     patient_id = world["duplicate_patient"]
     client = FakeClient([FakeResponse([_submit()])])

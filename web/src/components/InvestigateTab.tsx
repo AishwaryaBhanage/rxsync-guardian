@@ -125,7 +125,6 @@ export function InvestigateTab() {
         >
           <div className="card-title">
             <span className="eyebrow">The ticket</span>
-            <span className="hint">{MODEL_META[model].note}</span>
           </div>
 
           <div className="composer-grid">
@@ -147,7 +146,7 @@ export function InvestigateTab() {
           </div>
 
           <div className="composer-actions">
-            <div className="field" style={{ maxWidth: 260, flex: "1 1 200px" }}>
+            <div className="field model-field">
               <label className="label" htmlFor="model">
                 Model
               </label>
@@ -158,10 +157,13 @@ export function InvestigateTab() {
               >
                 {MODELS.map((id) => (
                   <option key={id} value={id}>
-                    {MODEL_META[id].label} — {MODEL_META[id].note}
+                    {MODEL_META[id].label}
                   </option>
                 ))}
               </select>
+              {/* The note sits outside the <select>: option text is clipped to
+                  the control's width, which is how the label got cut off. */}
+              <span className="hint">{MODEL_META[model].note}</span>
             </div>
 
             <button type="submit" className="primary" disabled={!ready}>
