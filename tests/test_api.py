@@ -365,20 +365,6 @@ def test_an_unknown_patient_still_returns_a_diagnosis(world):
 # --- CORS and the Lambda adapter -----------------------------------------
 
 
-def test_cors_headers_are_returned_only_for_the_allowed_origin():
-    assert api.cors_headers("http://localhost:5173")["access-control-allow-origin"] == (
-        "http://localhost:5173"
-    )
-    assert api.cors_headers("https://evil.example") == {}
-    assert api.cors_headers(None) == {}
-
-
-def test_cors_headers_permit_the_demo_key_header():
-    headers = api.cors_headers("http://localhost:5173")
-    assert "x-demo-key" in headers["access-control-allow-headers"]
-    assert "POST" in headers["access-control-allow-methods"]
-
-
 def test_the_lambda_handler_shapes_a_function_url_response():
     event = {
         "version": "2.0",
@@ -389,8 +375,80 @@ def test_the_lambda_handler_shapes_a_function_url_response():
     response = handler(event)
     assert response["statusCode"] == 200
     assert response["headers"]["content-type"] == "application/json"
-    assert response["headers"]["access-control-allow-origin"] == "http://localhost:5173"
     assert json.loads(response["body"])["patients"]
+
+
+def test_the_lambda_handler_leaves_cors_to_the_function_url():
+    # The function URL adds CORS headers itself; a second copy from the function
+    # is not merged, and browsers reject a doubled Access-Control-Allow-Origin.
+    event = {
+        "requestContext": {"http": {"method": "GET", "path": "/health"}},
+        "headers": {"x-demo-key": KEY, "origin": "http://localhost:5173"},
+    }
+    headers = handler(event)["headers"]
+    assert not any(name.lower().startswith("access-control-") for name in headers)
+
+
+# --- secrets from Secrets Manager ------------------------------------------
+
+
+class FakeSecrets:
+    """Stands in for a boto3 secretsmanager client."""
+
+    def __init__(self, values: dict[str, str | None]):
+        self.values = values
+        self.asked: list[str] = []
+
+    def get_secret_value(self, SecretId: str) -> dict[str, str]:  # boto3's keyword name
+        self.asked.append(SecretId)
+        value = self.values.get(SecretId)
+        if value is None:
+            # What an empty secret raises before its first put-secret-value.
+            raise LookupError("ResourceNotFoundException")
+        return {"SecretString": value}
+
+
+@pytest.fixture
+def secret_arns(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY_SECRET_ARN", "arn:anthropic")
+    monkeypatch.setenv("DEMO_KEY_SECRET_ARN", "arn:demo")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEMO_KEY", raising=False)
+
+
+def test_secrets_fill_their_env_vars(secret_arns):
+    import os
+
+    fake = FakeSecrets({"arn:anthropic": "sk-test", "arn:demo": "demo-test"})
+    assert api.load_secrets(fake) == []
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-test"
+    assert os.environ["DEMO_KEY"] == "demo-test"
+
+
+def test_an_empty_secret_is_reported_missing_and_the_api_stays_closed(secret_arns, capsys):
+    fake = FakeSecrets({"arn:anthropic": "sk-test", "arn:demo": None})
+    assert api.load_secrets(fake) == ["DEMO_KEY"]
+    # With no DEMO_KEY the API refuses everything rather than opening up.
+    assert route(Request("GET", "/health", {"x-demo-key": ""})).status == 500
+    # The log names the secret, never a value.
+    assert "sk-test" not in capsys.readouterr().out
+
+
+def test_a_loaded_secret_is_not_fetched_again(secret_arns):
+    fake = FakeSecrets({"arn:anthropic": "sk-test", "arn:demo": None})
+    api.load_secrets(fake)
+    fake.values["arn:demo"] = "set-later"
+    assert api.load_secrets(fake) == []
+    # The second pass only asked for the secret that was still missing.
+    assert fake.asked == ["arn:anthropic", "arn:demo", "arn:demo"]
+
+
+def test_without_secret_arns_nothing_is_fetched(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY_SECRET_ARN", raising=False)
+    monkeypatch.delenv("DEMO_KEY_SECRET_ARN", raising=False)
+    fake = FakeSecrets({})
+    assert api.load_secrets(fake) == []
+    assert fake.asked == []
 
 
 def test_the_lambda_handler_is_case_insensitive_about_headers():

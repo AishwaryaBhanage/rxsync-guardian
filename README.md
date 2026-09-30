@@ -142,7 +142,7 @@ If port 5173 is taken, run `npm run dev -- --port 5174` and start the API with
 
 ### Designed, not built
 
-- **Deployment on AWS Lambda with Terraform.** The Lambda handler exists and is tested, but `infra/` is still empty and nothing is deployed.
+- **Deployment on AWS Lambda with Terraform.** Written and planned, not yet applied. See [`infra/README.md`](infra/README.md).
 - **CI** running the full test suite and lint on every push. No workflow exists yet.
 
 ### Next

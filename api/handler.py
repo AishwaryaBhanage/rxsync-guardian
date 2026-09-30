@@ -203,27 +203,61 @@ def _report() -> list[dict[str, Any]]:
 
 # --- AWS Lambda function URL ---------------------------------------------
 
+# Plain env var the app reads -> env var holding the ARN of the Secrets Manager
+# secret to fill it from. Terraform sets the ARNs; the values never pass through it.
+SECRET_ARN_VARS = {
+    "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY_SECRET_ARN",
+    "DEMO_KEY": "DEMO_KEY_SECRET_ARN",
+}
 
-def cors_headers(origin: str | None) -> dict[str, str]:
-    """Echo the allowed origin only when the request actually came from it."""
-    permitted = allowed_origin()
-    if origin != permitted:
-        return {}
-    return {
-        "access-control-allow-origin": permitted,
-        "access-control-allow-headers": f"content-type, {DEMO_KEY_HEADER}",
-        "access-control-allow-methods": "GET, POST, OPTIONS",
-        "access-control-max-age": "600",
-        "vary": "origin",
-    }
+
+def load_secrets(client: Any = None) -> list[str]:
+    """Copy each configured secret into its plain env var; return the names still unset.
+
+    Runs at cold start and again on each invocation until everything is loaded, so
+    a secret whose value is set after deploy is picked up without a redeploy. A
+    secret created empty has no version yet and raises here; that is logged and
+    left unset, and `_check_key` then answers 500 rather than letting anyone in.
+    """
+    missing = []
+    for name, arn_var in SECRET_ARN_VARS.items():
+        arn = os.environ.get(arn_var)
+        if not arn or os.environ.get(name):
+            continue
+        if client is None:
+            import boto3  # present in the Lambda runtime; not needed locally
+
+            client = boto3.client("secretsmanager")
+        try:
+            value = client.get_secret_value(SecretId=arn).get("SecretString") or ""
+        except Exception as exc:  # noqa: BLE001 - any failure means "not loaded yet"
+            # Only the exception type is logged, never the response.
+            print(f"secret {name} not loaded: {type(exc).__name__}")
+            value = ""
+        if value:
+            os.environ[name] = value
+        else:
+            missing.append(name)
+    return missing
+
+
+# Cold start: fetch the secrets once, at import, when deployed. Locally and in
+# tests no *_SECRET_ARN is set, so this does nothing and boto3 is never imported.
+if any(os.environ.get(arn_var) for arn_var in SECRET_ARN_VARS.values()):
+    load_secrets()
 
 
 def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
-    """AWS Lambda function-URL entry point (payload format 2.0)."""
+    """AWS Lambda function-URL entry point (payload format 2.0).
+
+    No CORS headers are added here: the function URL's own CORS config adds them,
+    and Lambda does not de-duplicate, so a second copy from the function would make
+    browsers reject every response.
+    """
+    load_secrets()
     request = _request_from_event(event)
     response = route(request)
     headers = {"content-type": "application/json", **response.headers}
-    headers.update(cors_headers(request.headers.get("origin")))
     return {
         "statusCode": response.status,
         "headers": headers,
